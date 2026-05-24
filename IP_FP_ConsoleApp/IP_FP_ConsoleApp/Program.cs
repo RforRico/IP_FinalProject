@@ -7,8 +7,6 @@ using System.Linq;
 using ILOG.Concert;
 using ILOG.CPLEX;
 
-// IP Term Project - CPLEX Full Version
-//
 // 功能：
 // 1. 讀取 ORDER / MACHINE / MOLD / MATERIAL_ROUTE / MAINTENANCE
 // 2. 自動產生 feasible production groups，包含 partial cavity group
