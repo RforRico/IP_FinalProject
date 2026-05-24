@@ -1,6 +1,4 @@
-# IP Term Project - CPLEX Full Version
-
-這是 C# + CPLEX 完整版。
+# IP Term Project - CPLEX
 
 ## 功能
 
