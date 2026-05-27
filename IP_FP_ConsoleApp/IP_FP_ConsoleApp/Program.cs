@@ -52,9 +52,9 @@ class Program
         totalWatch.Start();
 
         string folder = args.Length >= 1 ? args[0] : Directory.GetCurrentDirectory();
-        int maxGroupSize = args.Length >= 2 ? int.Parse(args[1]) : 2;
-        double timeLimitSeconds = args.Length >= 3 ? double.Parse(args[2], CultureInfo.InvariantCulture) : 120.0;
-        int maxCandidates = args.Length >= 4 ? int.Parse(args[3]) : 6000;
+        int maxGroupSize = args.Length >= 2 ? int.Parse(args[1]) : 3;
+        double timeLimitSeconds = args.Length >= 3 ? double.Parse(args[2], CultureInfo.InvariantCulture) : 600.0;
+        int maxCandidates = args.Length >= 4 ? int.Parse(args[3]) : 10000;
 
         Console.WriteLine("===== IP Term Project CPLEX Solver =====");
         Console.WriteLine("Input folder       : " + folder);
@@ -157,20 +157,12 @@ class Program
             }
 
             // Objective:
-            // 第一優先：最大化 scheduled orders
-            // 第二優先：偏好較早開始
-            // 第三優先：稍微懲罰 group 數，避免切太碎
+            // 最大化 scheduled orders
             ILinearNumExpr objective = model.LinearNumExpr();
 
             for (int i = 0; i < O; i++)
             {
-                objective.AddTerm(1000000.0, u[i]);
-            }
-
-            for (int g = 0; g < G; g++)
-            {
-                objective.AddTerm(-0.0001, start[g]);
-                objective.AddTerm(-1.0, y[g]);
+                objective.AddTerm(1.0, u[i]);
             }
 
             model.AddMaximize(objective);
@@ -292,11 +284,7 @@ class Program
             // Constraint 6:
             // Maintenance disjunction
             //
-            // 這裡採保守但安全的 block：
-            // [processing start - 40min, processing end + 20min]
-            // 不可與 maintenance overlap。
-            //
-            // 代表 setup 和 processing 都不會碰到 maintenance。
+            // setup 和 processing 都不會碰到 maintenance。
             // ------------------------------------------------------------
             int maintenanceConstraintCount = 0;
 
@@ -323,7 +311,7 @@ class Program
                         expr.AddTerm(bigM, beforeMaintenance);
                         expr.AddTerm(bigM, y[g]);
 
-                        double rhs = mtStartSec + 2.0 * bigM - cg.TotalSpanSeconds - LastPostSetupSeconds;
+                        double rhs = mtStartSec + 2.0 * bigM - cg.TotalSpanSeconds - BetweenBeforeMaintenanceSeconds;
                         model.AddLe(expr, rhs, "maintenance_before_" + g + "_" + maintenanceConstraintCount);
                     }
 
@@ -335,7 +323,7 @@ class Program
                         expr.AddTerm(-bigM, beforeMaintenance);
                         expr.AddTerm(bigM, y[g]);
 
-                        double rhs = -mtEndSec + bigM - FirstPreSetupSeconds;
+                        double rhs = -mtEndSec + bigM - BetweenAfterMaintenanceSeconds;
                         model.AddLe(expr, rhs, "maintenance_after_" + g + "_" + maintenanceConstraintCount);
                     }
 
@@ -352,8 +340,8 @@ class Program
             // 若兩個 groups 使用同一 mold，且兩者同時使用會超過 mold quantity，
             // 則這兩個 groups 不可重疊。
             //
-            // 注意：
-            // 這是 pairwise conflict 模型，對大部分作業資料已夠用。
+            // Mark：
+            // 這是 pairwise conflict 模型
             // 若要完全處理多個 group 同時累積超量，需建立更大的 cumulative model。
             // 但後面的 validator 仍會完整重檢 mold availability。
             // ------------------------------------------------------------
@@ -411,6 +399,10 @@ class Program
                     if (yg >= 0.5)
                     {
                         double st = model.GetValue(start[g]);
+                        if (st < FirstPreSetupSeconds && FirstPreSetupSeconds - st <= 1.0)
+                        {
+                            st = FirstPreSetupSeconds;
+                        }
                         CandidateGroup cg = candidates[g];
 
                         ScheduledGroup sg = new ScheduledGroup();
@@ -544,7 +536,7 @@ class Program
                 }
                 else
                 {
-                    // size >= 3 時 permutation 很容易爆炸。
+                    // size >= 3 時 permutation 容易爆炸。
                     // 這裡保留幾種常見排序，避免 candidate 數量太大。
                     sequences = GenerateLimitedSequences(subset);
                 }
